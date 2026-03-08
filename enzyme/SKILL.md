@@ -9,7 +9,7 @@ compatibility: Requires shell access (macOS arm64, Linux x86_64/arm64). Binary a
 allowed-tools: Bash Read Glob Grep
 metadata:
   author: jshph
-  version: "0.3.2"
+  version: "0.3.3"
   homepage: https://enzyme.garden
 ---
 
