@@ -53,7 +53,7 @@ if [ ! -f "${MODEL_DIR}/model.onnx" ]; then
     mkdir -p "$MODEL_DIR"
     cp "${SKILL_ROOT}/models/model.onnx" "$MODEL_DIR/"
     cp "${SKILL_ROOT}/models/tokenizer.json" "$MODEL_DIR/"
-    cp "${SKILL_ROOT}/models/.model_version" "$MODEL_DIR/"
+    [ -f "${SKILL_ROOT}/models/.model_version" ] && cp "${SKILL_ROOT}/models/.model_version" "$MODEL_DIR/"
 fi
 
 # Create a wrapper in PATH.

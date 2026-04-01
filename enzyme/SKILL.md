@@ -9,142 +9,180 @@ compatibility: Requires shell access (macOS arm64, Linux x86_64/arm64). Binary a
 allowed-tools: Bash Read Glob Grep
 metadata:
   author: jshph
-  version: "0.4.2"
+  version: "0.4.3"
   homepage: https://enzyme.garden
+  openclaw:
+    requires:
+      anyBins: ["enzyme"]
+    install:
+      - type: download
+        url: https://raw.githubusercontent.com/jshph/enzyme/main/install.sh
+        run: bash
+    os: ["darwin", "linux"]
+    always: true
 ---
 
-# Enzyme — Vault Exploration Skill
+# Enzyme — Vault Exploration
 
-## What Enzyme Is
+Enzyme reads your vault's tags, links, folders, and timestamps and builds a concept graph. Queries resolve against **catalysts** — pre-computed thematic questions that bridge your content — not raw text. 8ms queries, local embeddings, no runtime LLM calls for search.
 
-Enzyme turns your Obsidian vault into something you can converse with. It works through three concepts:
+## Prerequisites
 
-**Entities** are the tags (`#travel`), wikilinks (`[[open questions]]`), and folders (`/people`) in your vault. Each one is a semantic cluster — a gathering of content you've already organized by how you think. Hierarchical tags like `#travel/pyrenees` create nested clusters.
+Enzyme resolves the vault path in this order: `-p` flag > `ENZYME_VAULT_ROOT` env var > current directory.
 
-**Catalysts** are AI-generated questions anchored to each entity. They probe what's latent in that cluster. A catalyst for `#travel` might be: *"What kept pulling you forward when something was asking you to stay?"* — and content surfaces because it **speaks to the question**, not because it contains matching words. The same entity explored through different catalysts reveals different material.
-
-**Petri** is the live readout of what's growing in your vault — which entities are active, what catalysts have formed around them, where the thinking is heading. Each entity carries temporal metadata: when you last engaged it, how frequently, whether it's active or dormant. Dormant entities are often the most interesting — they surface threads you've stopped noticing.
-
-Content retrieval works by **resonance with catalyst questions**, not keyword matching. The catalysts encode the vault's own vocabulary for its themes — they're handles the vault has grown. Reaching for them connects you to content that generic search terms won't find.
-
-## Setup
-
-The enzyme binary and embedding model are bundled with this skill. If `enzyme` is not already on PATH, run the setup script:
-
+Check if initialized:
 ```bash
-sh scripts/setup.sh
+ls ${ENZYME_VAULT_ROOT:-.}/.enzyme/enzyme.db 2>/dev/null || ls /tmp/enzyme/enzyme.db 2>/dev/null
 ```
 
-This copies the platform binary and model to `~/.cache/enzyme/` and creates a wrapper at `~/.local/bin/enzyme`. No network access required.
+If `enzyme.db` exists, skip to **Using Enzyme**. If not, follow **First-Time Setup**.
 
-Enzyme resolves the vault path in this order: `-p` flag > `ENZYME_VAULT_ROOT` env var > current directory. If `ENZYME_VAULT_ROOT` is set (check with `echo $ENZYME_VAULT_ROOT`), all commands automatically target the right vault.
+## First-Time Setup
 
-### Check vault initialization
-
-```bash
-ls ${ENZYME_VAULT_ROOT:-.}/.enzyme/enzyme.db
-```
-
-- If `.enzyme/enzyme.db` exists: vault is ready. Run `enzyme petri` to begin.
-- If it doesn't exist: run `enzyme init` to initialize the vault.
-
-## Commands
-
-### `enzyme petri` — See what's growing
-
-Returns JSON with trending entities and their catalysts.
+### 1. Install enzyme (if not on PATH)
 
 ```bash
-enzyme petri                  # Default: top 10 entities
-enzyme petri -n 5             # Top 5 entities
+curl -fsSL https://raw.githubusercontent.com/jshph/enzyme/main/install.sh | bash
 ```
+
+### 2. Scan the vault
+
+Before initializing, understand what's in the vault. Look at:
+
+- **Folder structure**: which folders have markdown, sorted by recency and file count
+- **Tag landscape**: frontmatter tags (`- tag` under `tags:`) and inline tags (`#tag`). Count frequency across recent files (last 90 days). Note hierarchical tags (`#travel/pyrenees`).
+- **Wikilinks**: frequently referenced notes, hub pages
+- **Structural files**: check for CLAUDE.md, AGENTS.md, guide.md, MOC.md, or any file that describes vault conventions
+- **File dates**: frontmatter `created` or `date` field first, filesystem created date as fallback
+
+### 3. Detect existing conventions
+
+Read any existing instruction files (CLAUDE.md, AGENTS.md, guide.md). Look for:
+- Where notes get written ("capture to inbox/", "daily notes in journal/")
+- Tagging habits ("use #project/name for work items")
+- Any organizational patterns the user has already established
+
+If conventions exist, adopt them. If none exist, ask the user once: "Where should I capture session insights? I can use `journal/` or match whatever you already do."
+
+### 4. Compose guide and initialize
+
+From the scan, compose a guide — a freeform list of entities to focus on:
+
+```
+#research
+#design
+#people
+folder:inbox
+folder:projects -- active work
+
+excludedTags:
+- todo
+- template
+- archived
+```
+
+Then initialize:
+```bash
+enzyme init --quiet --guide "<guide content>"
+```
+
+The `--quiet` output includes petri data under the `petri` key. Do not run a separate `enzyme petri` call.
+
+### 5. Write persistent instructions
+
+Add the enzyme tools section to the runtime's persistent instruction file (AGENTS.md for OpenClaw, CLAUDE.md for Claude Code, or equivalent). Include:
+
+- The tools available (petri, catalyze, refresh)
+- The working memory pattern (run petri on first message, use catalysts to compose catalyze queries)
+- Capture conventions discovered or established in step 3
+
+This ensures enzyme tools work on every future session without the full skill being invoked.
+
+### 6. Tell the user what happened
+
+One message:
+> Enzyme indexed N notes across M entities. [Brief description of top themes found.]
+> Session insights will be captured to [folder] following your existing conventions.
+
+## Using Enzyme
+
+### `enzyme petri` — See what's in the vault
+
+Returns trending entities with catalysts (thematic phrases) and temporal metadata.
+
+```bash
+enzyme petri                          # Top 10 entities by recency
+enzyme petri -n 5                     # Top 5
+enzyme petri --query "user's question" # Entities ranked by relevance
+```
+
+With `--query`, results are narrowed to entities and catalysts relevant to the question. Without it, you get the full landscape.
 
 ### `enzyme catalyze "query"` — Search by concept
-
-Activates the vault's catalysts to surface resonant content. Returns JSON with matched excerpts, file paths, and contributing catalysts.
 
 ```bash
 enzyme catalyze "feeling stuck"
 enzyme catalyze "tension between efficiency and presence" -n 20
+enzyme catalyze "what I decided about X" --register continuity
 ```
 
-### `enzyme init` — Initialize a vault
+Compose queries using catalyst vocabulary from petri rather than the user's raw words. Catalysts reach content that generic terms won't find.
 
-```bash
-enzyme init                           # Initialize current directory
-enzyme init -p /path/to/vault
-enzyme init --guide "vault guide content"
-```
+**`--register`** controls presentation:
+- `explore` (default) — wonder, probe, notice patterns
+- `continuity` — restore context, show trajectory
+- `reference` — surface capture patterns, connect imports to the user's thinking
 
 ### `enzyme refresh` — Update the index
 
-Lightweight update that only re-runs if content has changed. Use `--full` to force a complete re-index if results seem off.
-
 ```bash
-enzyme refresh                        # Incremental update
-enzyme refresh --full                 # Force full re-index
+enzyme refresh --quiet    # Fast: skips if nothing changed
+enzyme refresh --full     # Force complete re-index
 ```
 
-### `--quiet` mode (agent/headless use)
+Runs automatically on session start. Manual use is rarely needed.
 
-Both `enzyme init --quiet` and `enzyme refresh --quiet` output compact JSON to stdout that includes full petri data. **Do not follow up with a separate `enzyme petri` call** — it's already in the response under the `petri` key.
-
-When `refresh --quiet` detects the vault is fresh (nothing to do), the output is `{ "fresh": true, "petri": ... }`. When stale, the full output includes indexing stats, capabilities, warnings, entity changes, and petri.
-
-### `enzyme apply <target>` — Project catalysts onto external content
-
-Indexes an external directory using the current vault's catalysts. After applying, search the target with `enzyme catalyze "query" --vault <target>`.
+### `enzyme status` — Vault stats
 
 ```bash
-enzyme apply ./research-papers           # Apply current vault's catalysts
-enzyme apply ./papers --source ~/vault   # Explicit source vault
+enzyme status
 ```
 
-### When to use `catalyze` vs text search
+Returns doc count, entity count, catalyst count, embedding coverage.
 
-**Use text search (grep) when you have a concrete anchor** — something that exists verbatim in the vault:
-- People: "Sarah", `[[Dr. Chen]]`
-- Tags: `#productivity`, `#enzyme/pmf`
-- Links/titles: `[[On Writing Well]]`, `[[meeting notes]]`
-- Files: `Readwise/Articles/...`, book titles, paper names
-- Proper nouns: places, companies, projects
+### When to use `catalyze` vs `grep`
 
-**Use `catalyze` when you only have a theme/concept** — no anchor to grep:
-- "What have I written about feeling stuck?" (no name, no tag, no title)
-- "cost of care in algorithmic interfaces" (academic framing — vault won't use these words)
-- "tension between efficiency and presence" (conceptual, not anchored)
+**Use grep** when you have a concrete anchor — something that exists verbatim:
+- Names, tags, wikilinks, file paths, proper nouns
 
-The test: would these exact words appear in their notes? Names and tags always do. Abstract/academic language rarely does — vaults use personal, concrete phrasing.
+**Use catalyze** when you only have a theme — no exact text to match:
+- "What have I written about feeling stuck?"
+- "tension between efficiency and presence"
+
+The test: would these exact words appear in their notes? Names and tags always do. Abstract language rarely does.
 
 ### Reading JSON output
 
-Enzyme commands return JSON. Read the output directly — do not pipe through Python or jq.
+Both `petri` and `catalyze` return JSON. Read output directly — do not pipe through Python or jq.
 
-**`enzyme petri`** — each entity object has:
-- `name`, `type`, `frequency`, `activity_trend`, `days_since_last_seen`
-- `catalysts`: array of `{ text, context }`
+**petri** — each entity has: `name`, `type`, `frequency`, `activity_trend`, `days_since_last_seen`, `catalysts` (array of `{ text, context }`)
 
-**`enzyme catalyze`** — response has:
-- `results`: array of `{ file_path, content, similarity }`
-- `top_contributing_catalysts`: array of `{ text, entity, contribution_count }`
+**catalyze** — response has: `results` (array of `{ file_path, content, similarity }`), `top_contributing_catalysts` (array of `{ text, entity, contribution_count }`), `register`, `presentation_guidance`
 
-## Workflow
+## Capture Conventions
 
-1. **Discover vault context.** Scan for structural files that reveal the vault's shape:
-   - Look for `**/MOC.md`, `**/Index.md`, `**/agents.md`, `**/guide.md`, `**/ENZYME_GUIDE.md`, and `**/_index.md`
-   - Read any discovered files to understand vault structure, conventions, and user preferences
-   - If the vault is **not initialized** (no `.enzyme/enzyme.db`), build a guide by stacking the files with context headers describing what each one is, then pipe to `enzyme init --guide`. Example:
-     ```bash
-     enzyme init --guide "$(printf '=== guide.md (entity weights) ===\n'; cat guide.md; printf '\n\n=== CLAUDE.md (vault workflow instructions) ===\n'; cat CLAUDE.md)"
-     ```
-   - If the vault **is initialized**, use this context to orient your petri reading
+When writing notes back to the vault:
 
-2. **Start with petri.** Run `enzyme petri` to see the landscape — what's active, what's dormant, what catalysts have formed. (If you just ran `init --quiet` or `refresh --quiet`, petri is already in the JSON output — skip this step.)
+- **Use existing tags.** Check petri entities before creating new ones. If `#design` exists, don't create `#design-thinking`.
+- **Use wikilinks** to reference existing notes when relevant. `[[open questions]]` creates a connection enzyme can follow.
+- **One insight per note** with descriptive filenames, not timestamps alone. `journal/2026-03-28-auth-decision.md` over a bullet in `journal/2026-03-28.md`.
+- **Keep capture notes short** — 3-10 lines. The decision, the reasoning, the open thread.
+- **Frontmatter tags** for entity association. Enzyme picks up both frontmatter `tags:` and inline `#tags`.
 
-3. **Ground in evidence.** Before making observations, use catalysts from the petri to run `enzyme catalyze` searches. Look across entities for patterns — what the user keeps returning to, avoiding, or circling.
+These defaults should be adapted to match whatever conventions already exist in the vault.
 
-4. **Open with a question.** Synthesize a single 10-20 word question that names something the user is *doing* across their vault — then ground it with their words. Follow [petri-guide.md](references/petri-guide.md).
+## Presentation
 
-5. **Follow threads.** Use catalysts from petri results to drive searches based on what the user responds to. A catalyst for one entity often surfaces content connecting to another.
+When presenting results to the user, follow [petri-guide.md](references/petri-guide.md) for vault overviews and [search-guide.md](references/search-guide.md) for search results. Lead with the user's own words, not metadata.
 
-6. **Present search results** following [search-guide.md](references/search-guide.md). Lead with their words from matched excerpts, notice tensions across results, suggest specific next searches using catalyst language.
+Never expose tool names (catalyze, petri) to the user. Never open with energy assessments of the vault. The gift is in what you noticed, not in how quickly you connected the dots.
