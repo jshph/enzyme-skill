@@ -1,2 +1,2 @@
-enzyme/bin/enzyme-* filter=lfs diff=lfs merge=lfs -text
-enzyme/models/model.onnx filter=lfs diff=lfs merge=lfs -text
+bin/enzyme-* filter=lfs diff=lfs merge=lfs -text
+models/model.onnx filter=lfs diff=lfs merge=lfs -text
