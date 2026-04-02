@@ -1,15 +1,15 @@
 """Tool handlers for the enzyme Hermes plugin.
 
-Each handler shells out to the enzyme CLI and returns a JSON string.
-Signature: (args: dict, **kwargs) -> str
+Each handler shells out to the enzyme CLI and returns JSON.
+No reimplementation of core logic — the binary does all the work.
 """
 
-import json
 import subprocess
+from typing import Any
 
 
-def _run_enzyme(args: list[str], timeout: int = 30) -> str:
-    """Run an enzyme CLI command and return JSON string."""
+def _run_enzyme(args: list[str], timeout: int = 30) -> dict[str, Any]:
+    """Run an enzyme CLI command and return the result."""
     try:
         result = subprocess.run(
             ["enzyme"] + args,
@@ -18,50 +18,51 @@ def _run_enzyme(args: list[str], timeout: int = 30) -> str:
             timeout=timeout,
         )
         if result.returncode != 0:
-            return json.dumps({"error": result.stderr.strip() or f"enzyme exited with code {result.returncode}"})
+            return {"error": result.stderr.strip() or f"enzyme exited with code {result.returncode}"}
         output = result.stdout.strip()
         if not output:
-            return json.dumps({"ok": True})
-        return json.dumps({"output": output})
+            return {"ok": True}
+        # enzyme outputs JSON — return as string for the LLM to read
+        return {"output": output}
     except subprocess.TimeoutExpired:
-        return json.dumps({"error": f"enzyme timed out after {timeout}s"})
+        return {"error": f"enzyme timed out after {timeout}s"}
     except FileNotFoundError:
-        return json.dumps({"error": "enzyme binary not found. Run install.sh first."})
+        return {"error": "enzyme binary not found. Run install.sh first."}
 
 
-def handle_petri(args: dict, **kwargs) -> str:
-    cmd = ["petri", "-n", str(args.get("top", 10))]
-    query = args.get("query")
+def handle_petri(query: str | None = None, top: int = 10) -> dict[str, Any]:
+    args = ["petri", "-n", str(top)]
     if query:
-        cmd.extend(["--query", query])
-    return _run_enzyme(cmd)
+        args.extend(["--query", query])
+    return _run_enzyme(args)
 
 
-def handle_catalyze(args: dict, **kwargs) -> str:
-    query = args.get("query", "")
-    cmd = ["catalyze", query, "-n", str(args.get("limit", 10))]
-    register = args.get("register", "explore")
+def handle_catalyze(
+    query: str,
+    limit: int = 10,
+    register: str = "explore",
+) -> dict[str, Any]:
+    args = ["catalyze", query, "-n", str(limit)]
     if register != "explore":
-        cmd.extend(["--register", register])
-    return _run_enzyme(cmd)
+        args.extend(["--register", register])
+    return _run_enzyme(args)
 
 
-def handle_refresh(args: dict, **kwargs) -> str:
-    cmd = ["refresh", "--quiet"]
-    if args.get("full", False):
-        cmd.append("--full")
-    return _run_enzyme(cmd, timeout=120)
+def handle_refresh(full: bool = False) -> dict[str, Any]:
+    args = ["refresh", "--quiet"]
+    if full:
+        args.append("--full")
+    return _run_enzyme(args, timeout=120)
 
 
-def handle_status(args: dict, **kwargs) -> str:
+def handle_status() -> dict[str, Any]:
     return _run_enzyme(["status"])
 
 
-def handle_init(args: dict, **kwargs) -> str:
-    cmd = ["init"]
-    if args.get("quiet", True):
-        cmd.append("--quiet")
-    guide = args.get("guide")
+def handle_init(guide: str | None = None, quiet: bool = True) -> dict[str, Any]:
+    args = ["init"]
+    if quiet:
+        args.append("--quiet")
     if guide:
-        cmd.extend(["--guide", guide])
-    return _run_enzyme(cmd, timeout=120)
+        args.extend(["--guide", guide])
+    return _run_enzyme(args, timeout=120)
