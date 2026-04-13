@@ -1,2 +1,2 @@
 bin/enzyme-* filter=lfs diff=lfs merge=lfs -text
-models/model.onnx filter=lfs diff=lfs merge=lfs -text
+models/model.safetensors filter=lfs diff=lfs merge=lfs -text
