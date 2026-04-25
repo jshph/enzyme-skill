@@ -9,7 +9,7 @@ import platform
 import shutil
 import subprocess
 
-EXPECTED_VERSION = "0.5.2"
+EXPECTED_VERSION = "0.5.3"
 INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/jshph/enzyme/main/install.sh"
 
 
